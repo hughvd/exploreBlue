@@ -1,0 +1,23 @@
+# Environment variables
+.env
+
+# Virtual environment
+atlas/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Other common entries...
+.vscode/
+.idea/
+*.log
+*.db
+*.sqlite3
+.DS_Store
+Thumbs.db
+
+# Project specific
+embeddings.pkl
+config.json
