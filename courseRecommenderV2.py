@@ -47,7 +47,7 @@ class EmbeddingRecommender(object):
     def recommend(self, levels: Optional[List[int]] = None, query: str = '', debug: bool = False):
         print('Recommending...')
         #### Different prompts ####################
-        system_content = f"""You will be given a request from a student at The University of Michigan to provide quality course recommendations. \
+        system_content = f"""You will be given a request from a student to provide quality course recommendations. \
 Generate a course description that would be most applicable to their request. In the course description, provide a list of topics as well as a \
 general description of the course. Limit the description to be less than 200 words.
 

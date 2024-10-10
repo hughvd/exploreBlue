@@ -4,6 +4,11 @@ from openai import AsyncAzureOpenAI
 from typing import List, Optional, Dict, Any, AsyncGenerator
 import heapq
 from abc import ABC, abstractmethod
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class AsyncOpenAIClient:
     def __init__(self, config: Dict[str, str]):
@@ -13,26 +18,35 @@ class AsyncOpenAIClient:
             azure_endpoint=config["OPENAI_API_BASE"],
             organization=config["OPENAI_ORGANIZATION_ID"]
         )
-        self.model = config["OPENAI_MODEL"]
+        self.generator_model = config["GENERATOR_MODEL"]
+        self.rec_model = config["RECOMMENDER_MODEL"]
         self.embedding_model = config["OPENAI_EMBEDDING_MODEL"]
 
     async def generate_chat_completion(self, messages: List[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0,
-            stream=True
-        )
-        async for chunk in response:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.rec_model,
+                messages=messages,
+                temperature=0,
+                stream=True
+            )
+            async for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            logger.error(f"Error in generate_chat_completion: {str(e)}")
+            raise
 
     async def generate_embedding(self, text: str) -> List[float]:
-        response = await self.client.embeddings.create(
-            input=[text],
-            model=self.embedding_model
-        )
-        return response.data[0].embedding
+        try:
+            response = await self.client.embeddings.create(
+                input=[text],
+                model=self.embedding_model
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Error in generate_embedding: {str(e)}")
+            raise
 
 class SimilarityCalculator(ABC):
     @abstractmethod
@@ -56,7 +70,7 @@ class EmbeddingRecommender:
         self.courses_df = pd.DataFrame(courses_data)
 
     async def generate_example_description(self, query: str) -> str:
-        system_content = """You will be given a request from a student at The University of Michigan to provide quality course recommendations. \
+        system_content = f"""You will be given a request from a student at The University of Michigan to provide quality course recommendations. \
 Generate a course description that would be most applicable to their request. In the course description, provide a list of topics as well as a \
 general description of the course. Limit the description to be less than 200 words.
 
@@ -67,14 +81,21 @@ Student Request:
             {"role": "system", "content": system_content},
             {"role": "user", "content": query}
         ]
-        description = ""
-        async for token in self.openai_client.generate_chat_completion(messages):
-            description += token
-        return description
+        try:
+            response = await self.openai_client.client.chat.completions.create(
+                model=self.openai_client.generator_model,
+                messages=messages,
+                temperature=0,
+                stream=False
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Error generating example description: {str(e)}")
+            raise
 
-    def find_similar_courses(self, example_embedding: List[float], top_n: int = 50) -> List[int]:
+    def find_similar_courses(self, filtered_df: pd.DataFrame, example_embedding: List[float], top_n: int = 50) -> List[int]:
         heap = []
-        for idx, row in self.courses_df.iterrows():
+        for idx, row in filtered_df.iterrows():
             similarity = self.similarity_calculator.calculate(example_embedding, row['embedding'])
             if len(heap) < top_n:
                 heapq.heappush(heap, (similarity, idx))
@@ -83,23 +104,37 @@ Student Request:
         return [idx for _, idx in heap]
 
     async def stream_recommend(self, query: str, levels: Optional[List[int]] = None) -> AsyncGenerator[str, None]:
-        if self.courses_df is None:
-            raise ValueError("Courses have not been loaded. Call load_courses() first.")
+        try:
+            if self.courses_df is None:
+                raise ValueError("Courses have not been loaded. Call load_courses() first.")
 
-        # Generate example description and its embedding
-        example_description = await self.generate_example_description(query)
-        example_embedding = await self.openai_client.generate_embedding(example_description)
+            # Generate example description and its embedding
+            try:
+                example_description = await self.generate_example_description(query)
+            except Exception as e:
+                yield f"Error generating example description: {str(e)}"
+                return
 
-        # Filter courses by level and similarity
-        filtered_df = self.courses_df if levels is None else self.courses_df[self.courses_df['level'].isin(levels)]
-        similar_course_indices = self.find_similar_courses(example_embedding)
-        filtered_df = filtered_df.iloc[similar_course_indices]
+            try:
+                example_embedding = await self.openai_client.generate_embedding(example_description)
+            except Exception as e:
+                yield f"Error generating embedding: {str(e)}"
+                return
 
-        # Prepare course string for the prompt
-        course_string = "\n".join(f"{row['course']}: {row['description']}" for _, row in filtered_df.iterrows())
+            # Filter courses by level and similarity
+            filtered_df = self.courses_df if levels is None else self.courses_df[self.courses_df['level'].isin(levels)]
+            # Reset the index of filtered_df
+            filtered_df = filtered_df.reset_index(drop=True)
+            
+            similar_course_indices = self.find_similar_courses(filtered_df, example_embedding)
+            filtered_df = filtered_df.iloc[similar_course_indices]
 
-        # Prepare the recommendation prompt
-        system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
+
+            # Prepare course string for the prompt
+            course_string = "\n".join(f"{row['course']}: {row['description']}" for _, row in filtered_df.iterrows())
+
+            # Prepare the recommendation prompt
+            system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
 in guiding students towards their optimal academic paths. Your task is to provide personalized course recommendations \
 based on the student's profile:
 
@@ -119,11 +154,16 @@ Available Courses:
 Remember: Your recommendations should be tailored to the student's unique profile and aspirations. Aim to balance academic growth, career preparation, \
 and personal interest in your selections."""
 
-        messages = [{'role': 'system', 'content': system_rec_message}]
+            messages = [{'role': 'system', 'content': system_rec_message}]
 
-        # Stream the recommendation
-        async for token in self.openai_client.generate_chat_completion(messages):
-            yield token
+            # Stream the recommendation
+            try:
+                async for token in self.openai_client.generate_chat_completion(messages):
+                    yield token
+            except Exception as e:
+                yield f"Error generating recommendation: {str(e)}"
+        except Exception as e:
+            yield f"Unexpected error: {str(e)}"
 
 # Usage example:
 # config = {
@@ -131,7 +171,8 @@ and personal interest in your selections."""
 #     "OPENAI_API_VERSION": "your_api_version",
 #     "OPENAI_API_BASE": "your_api_base",
 #     "OPENAI_ORGANIZATION_ID": "your_org_id",
-#     "OPENAI_MODEL": "your_model",
+#     "GENERATOR_MODEL": "your_generator_model",
+#     "RECOMMENDER_MODEL": "your_recommender_model",
 #     "OPENAI_EMBEDDING_MODEL": "your_embedding_model"
 # }
 # openai_client = AsyncOpenAIClient(config)

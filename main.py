@@ -1,5 +1,4 @@
 # main.py
-
 import os
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends
@@ -8,8 +7,8 @@ from pydantic import BaseModel
 import pandas as pd
 from dotenv import load_dotenv
 
-# Import your modified EmbeddingRecommender class
-from recommender import EmbeddingRecommender
+# Import your modified EmbeddingRecommender class and other necessary components
+from recommender import EmbeddingRecommender, AsyncOpenAIClient, CosineSimilarityCalculator
 
 # Load environment variables
 load_dotenv()
@@ -36,8 +35,24 @@ def get_recommender():
         pkl_path = os.getenv("COURSE_PKL_PATH", "embeddings.pkl")
         df = pd.read_pickle(pkl_path)
         
+        # Initialize the AsyncOpenAIClient
+        config = {
+            "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+            "OPENAI_API_VERSION": os.getenv("OPENAI_API_VERSION"),
+            "OPENAI_API_BASE": os.getenv("OPENAI_API_BASE"),
+            "OPENAI_ORGANIZATION_ID": os.getenv("OPENAI_ORGANIZATION_ID"),
+            "GENERATOR_MODEL": os.getenv("GENERATOR_MODEL"),
+            "RECOMMENDER_MODEL": os.getenv("RECOMMENDER_MODEL"),
+            "OPENAI_EMBEDDING_MODEL": os.getenv("OPENAI_EMBEDDING_MODEL")
+        }
+        openai_client = AsyncOpenAIClient(config)
+        
+        # Initialize the CosineSimilarityCalculator
+        similarity_calculator = CosineSimilarityCalculator()
+        
         # Initialize the EmbeddingRecommender
-        recommender = EmbeddingRecommender(df)
+        recommender = EmbeddingRecommender(openai_client, similarity_calculator)
+        recommender.load_courses(df.to_dict('records'))
     return recommender
 
 @app.on_event("startup")
