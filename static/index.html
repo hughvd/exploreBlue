@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Recommender</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.3.4/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #recommendations {
+            white-space: pre-wrap;
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Course Recommender</h1>
+    <form id="recommendForm">
+        <label for="query">What are you interested in studying?</label><br>
+        <textarea id="query" name="query" rows="4" cols="50" required></textarea><br>
+        <label for="levels">Course Levels (optional, comma-separated):</label><br>
+        <input type="text" id="levels" name="levels"><br><br>
+        <button type="submit">Get Recommendations</button>
+    </form>
+    <h2>Recommendations:</h2>
+    <div id="recommendations"></div>
+
+    <script>
+        const form = document.getElementById('recommendForm');
+        const recommendationsDiv = document.getElementById('recommendations');
+
+        // form.addEventListener('submit', async (e) => {
+        //     e.preventDefault();
+        //     const query = document.getElementById('query').value;
+        //     const levels = document.getElementById('levels').value.split(',').map(Number).filter(Boolean);
+            
+        //     recommendationsDiv.textContent = 'Loading recommendations...';
+
+        //     try {
+        //         const response = await axios.post('/recommend', { query, levels }, {
+        //             responseType: 'stream'
+        //         });
+
+        //         const reader = response.data.getReader();
+        //         const decoder = new TextDecoder();
+        //         recommendationsDiv.textContent = '';
+
+        //         while (true) {
+        //             const { done, value } = await reader.read();
+        //             if (done) break;
+        //             const chunk = decoder.decode(value);
+        //             recommendationsDiv.textContent += chunk;
+        //         }
+        //     } catch (error) {
+        //         recommendationsDiv.textContent = 'Error: ' + error.message;
+        //     }
+        // });
+
+        // Frontend for recommendation without streaming
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = document.getElementById('query').value;
+            const levels = document.getElementById('levels').value.split(',').map(Number).filter(Boolean);
+            
+            recommendationsDiv.textContent = 'Loading recommendations...';
+
+            try {
+                const response = await axios.post('/recommend', { query, levels });
+                
+                // The response should now be a simple string
+                recommendationsDiv.textContent = response.data;
+            } catch (error) {
+                recommendationsDiv.textContent = 'Error: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

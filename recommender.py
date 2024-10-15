@@ -162,8 +162,66 @@ and personal interest in your selections."""
                     yield token
             except Exception as e:
                 yield f"Error generating recommendation: {str(e)}"
+                
+            except Exception as e:
+                yield f"Error generating recommendation: {str(e)}"
+
         except Exception as e:
             yield f"Unexpected error: {str(e)}"
+
+    async def recommend(self, query: str, levels: Optional[List[int]] = None) -> str:
+        try:
+            if self.courses_df is None:
+                raise ValueError("Courses have not been loaded. Call load_courses() first.")
+
+            # Generate example description and its embedding
+            example_description = await self.generate_example_description(query)
+            example_embedding = await self.openai_client.generate_embedding(example_description)
+
+            # Filter courses by level and similarity
+            filtered_df = self.courses_df if levels is None else self.courses_df[self.courses_df['level'].isin(levels)]
+            filtered_df = filtered_df.reset_index(drop=True)
+            
+            similar_course_indices = self.find_similar_courses(filtered_df, example_embedding)
+            filtered_df = filtered_df.iloc[similar_course_indices]
+
+            # Prepare course string for the prompt
+            course_string = "\n".join(f"{row['course']}: {row['description']}" for _, row in filtered_df.iterrows())
+
+            # Prepare the recommendation prompt
+            system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
+in guiding students towards their optimal academic paths. Your task is to provide personalized course recommendations \
+based on the student's profile:
+
+Instructions:
+1. Analyze the student's profile carefully, considering their interests, academic background, and career goals.
+2. Review the list of available courses provided below.
+3. Recommend the top 5-10 most suitable courses for this student.
+4. For each recommended course, provide a brief but compelling rationale (2-3 sentences) explaining why it's a good fit.
+5. Format your response as a numbered list, with each item containing the course name followed by your rationale.
+
+Student Profile:
+{query}
+
+Available Courses:
+{course_string}
+
+Remember: Your recommendations should be tailored to the student's unique profile and aspirations. Aim to balance academic growth, career preparation, \
+and personal interest in your selections."""
+
+            messages = [{'role': 'system', 'content': system_rec_message}]
+
+            response = await self.openai_client.client.chat.completions.create(
+                model=self.openai_client.rec_model,
+                messages=messages,
+                temperature=0,
+                stream=False
+            )
+            recommendation = response.choices[0].message.content
+            print(recommendation)
+            return recommendation
+        except Exception as e:
+            return f"Error: {str(e)}"
 
 # Usage example:
 # config = {

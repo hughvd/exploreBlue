@@ -3,6 +3,9 @@ import os
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 from dotenv import load_dotenv
@@ -15,6 +18,23 @@ load_dotenv()
 
 # Initialize FastAPI app
 app = FastAPI(title="Course Recommender API")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+# Mount the static directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Route to serve the index.html file
+@app.get("/")
+async def read_index():
+    return FileResponse('static/index.html')
 
 # Pydantic models for request
 class RecommendationRequest(BaseModel):
@@ -70,6 +90,27 @@ async def root():
     """
     return {"message": "Welcome to the Course Recommender API"}
 
+# @app.post("/recommend")
+# async def recommend_courses(
+#     request: RecommendationRequest,
+#     recommender: EmbeddingRecommender = Depends(get_recommender)
+# ):
+#     """
+#     Endpoint to get course recommendations based on user query and preferred levels.
+#     Returns a streaming response of OpenAI tokens.
+
+#     Args:
+#     - request (RecommendationRequest): Contains the user's query and preferred course levels.
+#     - recommender (EmbeddingRecommender): Instance of the recommender, injected as a dependency.
+
+#     Returns:
+#     - StreamingResponse: A stream of tokens from the OpenAI API.
+#     """
+#     return StreamingResponse(
+#         recommender.stream_recommend(levels=request.levels, query=request.query),
+#         media_type="text/plain"
+#     )
+
 @app.post("/recommend")
 async def recommend_courses(
     request: RecommendationRequest,
@@ -77,19 +118,17 @@ async def recommend_courses(
 ):
     """
     Endpoint to get course recommendations based on user query and preferred levels.
-    Returns a streaming response of OpenAI tokens.
+    Returns a string response of recommendations.
 
     Args:
     - request (RecommendationRequest): Contains the user's query and preferred course levels.
     - recommender (EmbeddingRecommender): Instance of the recommender, injected as a dependency.
 
     Returns:
-    - StreamingResponse: A stream of tokens from the OpenAI API.
+    - str: A string containing the course recommendations.
     """
-    return StreamingResponse(
-        recommender.stream_recommend(levels=request.levels, query=request.query),
-        media_type="text/plain"
-    )
+    recommendation = await recommender.recommend(query=request.query, levels=request.levels)
+    return recommendation
 
 @app.get("/health")
 async def health_check():

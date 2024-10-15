@@ -3,20 +3,12 @@
 
 # Virtual environment
 atlas/
+atlasSite/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Other common entries...
-.vscode/
-.idea/
-*.log
-*.db
-*.sqlite3
-.DS_Store
-Thumbs.db
 
 # Project specific
 embeddings.pkl
