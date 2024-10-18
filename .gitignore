@@ -13,3 +13,4 @@ __pycache__/
 # Project specific
 embeddings.pkl
 config.json
+testing.ipynb
