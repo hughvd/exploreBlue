@@ -134,25 +134,53 @@ Student Request:
             course_string = "\n".join(f"{row['course']}: {row['description']}" for _, row in filtered_df.iterrows())
 
             # Prepare the recommendation prompt
-            system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
-in guiding students towards their optimal academic paths. Your task is to provide personalized course recommendations \
-based on the student's profile:
+            system_rec_message = f"""You are an expert academic advisor specializing in personalized course recommendations. \
+When evaluating matches between student profiles and courses, prioritize direct relevance, prerequisite alignment, and career trajectory fit.
 
-Instructions:
-1. Analyze the student's profile carefully, considering their interests, academic background, and career goals.
-2. Review the list of available courses provided below.
-3. Recommend the top 5-10 most suitable courses for this student.
-4. For each recommended course, provide a brief but compelling rationale (2-3 sentences) explaining why it's a good fit.
-5. Format your response as a numbered list, with each item containing the course name followed by your rationale.
-
-Student Profile:
-{query}
-
-Available Courses:
+Context: Student Profile ({query})
+Course Options: 
 {course_string}
 
-Remember: Your recommendations should be tailored to the student's unique profile and aspirations. Aim to balance academic growth, career preparation, \
-and personal interest in your selections."""
+REQUIREMENTS:
+- Return exactly 10 courses, ranked by relevance and fit
+- Recommend ONLY courses listed in Course Options
+- For each recommendation include:
+  1. Course number
+  2. One-sentence explanation focused on student's specific profile/goals
+  3. Confidence level (High/Medium/Low)
+
+FORMAT (Markdown):
+1. COURSEXXX
+Rationale: [One clear sentence explaining fit]
+Confidence: [Level]
+
+2. [Next course...]
+
+CONSTRAINTS:
+- NO general academic advice
+- NO mentions of prerequisites unless explicitly stated in course description
+- NO suggestions outside provided course list
+- NO mention of being an AI or advisor"""
+            
+#             system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
+# in guiding students towards their optimal academic paths. Your task is to provide personalized course recommendations \
+# based on the student's profile:
+
+# Instructions:
+# 1. Analyze the student's profile carefully, considering their interests, academic background, and career goals.
+# 2. Review the list of available courses provided below.
+# 3. Recommend the top 5-10 most suitable courses for this student.
+# 4. For each recommended course, provide a brief but compelling rationale (2-3 sentences) explaining why it's a good fit.
+# 5. Format your response as a numbered list, with each item containing the course name followed by your rationale.
+
+# Student Profile:
+# {query}
+
+# Available Courses:
+# {course_string}
+
+# Remember: Your recommendations should be tailored to the student's unique profile and aspirations. Aim to balance academic growth, career preparation, \
+# and personal interest in your selections. Do not recommend courses that are not under available courses."""
 
             messages = [{'role': 'system', 'content': system_rec_message}]
 
@@ -189,25 +217,54 @@ and personal interest in your selections."""
             course_string = "\n".join(f"{row['course']}: {row['description']}" for _, row in filtered_df.iterrows())
 
             # Prepare the recommendation prompt
-            system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
-in guiding students towards their optimal academic paths. Your task is to provide personalized course recommendations \
-based on the student's profile:
+            # NOTE: our dataframe does not have the course name as a data column
+            system_rec_message = f"""You are an expert academic advisor specializing in personalized course recommendations. \
+When evaluating matches between student profiles and courses, prioritize direct relevance, prerequisite alignment, and career trajectory fit.
 
-Instructions:
-1. Analyze the student's profile carefully, considering their interests, academic background, and career goals.
-2. Review the list of available courses provided below.
-3. Recommend the top 5-10 most suitable courses for this student.
-4. For each recommended course, provide a brief but compelling rationale (2-3 sentences) explaining why it's a good fit.
-5. Format your response as a numbered list, with each item containing the course name followed by your rationale.
-
-Student Profile:
-{query}
-
-Available Courses:
+Context: Student Profile ({query})
+Course Options: 
 {course_string}
 
-Remember: Your recommendations should be tailored to the student's unique profile and aspirations. Aim to balance academic growth, career preparation, \
-and personal interest in your selections."""
+REQUIREMENTS:
+- Return exactly 10 courses, ranked by relevance and fit
+- Recommend ONLY courses listed in Course Options
+- For each recommendation include:
+  1. Course number
+  2. One-sentence explanation focused on student's specific profile/goals
+  3. Confidence level (High/Medium/Low)
+
+FORMAT (Markdown):
+1. **COURSEXXX: Couse Name**
+Rationale: [One clear sentence explaining fit]
+Confidence: [Level]
+
+2. [Next course...]
+
+CONSTRAINTS:
+- NO general academic advice
+- NO mentions of prerequisites unless explicitly stated in course description
+- NO suggestions outside provided course list
+- NO mention of being an AI or advisor"""
+            
+#             system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
+# in guiding students towards their optimal academic paths. Your task is to provide personalized course recommendations \
+# based on the student's profile:
+
+# Instructions:
+# 1. Analyze the student's profile carefully, considering their interests, academic background, and career goals.
+# 2. Review the list of available courses provided below.
+# 3. Recommend the top 5-10 most suitable courses for this student.
+# 4. For each recommended course, provide a brief but compelling rationale (2-3 sentences) explaining why it's a good fit.
+# 5. Format your response as a numbered list, with each item containing the course name followed by your rationale.
+
+# Student Profile:
+# {query}
+
+# Available Courses:
+# {course_string}
+
+# Remember: Your recommendations should be tailored to the student's unique profile and aspirations. Aim to balance academic growth, career preparation, \
+# and personal interest in your selections. Do not recommend courses that are not under available courses."""
 
             messages = [{'role': 'system', 'content': system_rec_message}]
 
@@ -218,7 +275,6 @@ and personal interest in your selections."""
                 stream=False
             )
             recommendation = response.choices[0].message.content
-            print(recommendation)
             return recommendation
         except Exception as e:
             return f"Error: {str(e)}"
