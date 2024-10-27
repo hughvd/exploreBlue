@@ -6,35 +6,37 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 import pandas as pd
 from dotenv import load_dotenv
 
-# Import your modified EmbeddingRecommender class and other necessary components
-from recommender import EmbeddingRecommender, AsyncOpenAIClient, CosineSimilarityCalculator
+# EmbeddingRecommender class and other necessary components
+from app.recommender import EmbeddingRecommender, AsyncOpenAIClient, CosineSimilarityCalculator
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from the project root
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize the recommender
+    get_recommender()
+    yield
+    # Shutdown: Clean up resources if needed
+    # This runs when the application is shutting down
+    pass
 
 # Initialize FastAPI app
-app = FastAPI(title="Course Recommender API")
+app = FastAPI(title="Course Recommender API", lifespan=lifespan)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],  # In production, replace with frontend domain
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
-
-# Mount the static directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Route to serve the index.html file
-@app.get("/")
-async def read_index():
-    return FileResponse('static/index.html')
 
 # Pydantic models for request
 class RecommendationRequest(BaseModel):
@@ -52,7 +54,7 @@ def get_recommender():
     global recommender
     if recommender is None:
         # Load the course data from pkl
-        pkl_path = os.getenv("COURSE_PKL_PATH", "embeddings.pkl")
+        pkl_path = "embeddings.pkl"
         df = pd.read_pickle(pkl_path)
         
         # Initialize the AsyncOpenAIClient
@@ -75,20 +77,12 @@ def get_recommender():
         recommender.load_courses(df.to_dict('records'))
     return recommender
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    Function that runs when the server starts up.
-    It initializes the recommender to avoid cold start issues.
-    """
-    get_recommender()
-
 @app.get("/")
 async def root():
     """
     Root endpoint to check if the API is running.
     """
-    return {"message": "Welcome to the Course Recommender API"}
+    return {"message": "Course Recommender API is running"}
 
 # @app.post("/recommend")
 # async def recommend_courses(

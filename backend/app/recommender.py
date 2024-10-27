@@ -197,6 +197,7 @@ CONSTRAINTS:
         except Exception as e:
             yield f"Unexpected error: {str(e)}"
 
+    # Temporary function until UM ITS releases streaming for UMGPT API
     async def recommend(self, query: str, levels: Optional[List[int]] = None) -> str:
         try:
             if self.courses_df is None:

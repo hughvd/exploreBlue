@@ -1,0 +1,31 @@
+services:
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/app
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./backend/embeddings.pkl:/app/embeddings.pkl
+    environment:
+      - PYTHONPATH=/app
+    networks:
+      - app-network
+
+networks:
+  app-network:    # This line needed proper indentation
+    driver: bridge
