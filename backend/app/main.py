@@ -1,15 +1,92 @@
 # main.py
 import os
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Depends
+from typing import List, Optional, Callable
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pydantic import BaseModel
 import pandas as pd
 from dotenv import load_dotenv
+import boto3
+# CPU Monitoring
+import time
+import psutil
+import functools
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class CPUMonitor:
+    def __init__(self):
+        self.process = psutil.Process()
+    
+    @contextmanager
+    def measure_cpu(self, request_id: str):
+        """Context manager to measure CPU usage during request processing"""
+        start_time = time.time()
+        start_cpu_time = self.process.cpu_times()
+        
+        try:
+            yield
+        finally:
+            end_time = time.time()
+            end_cpu_time = self.process.cpu_times()
+            
+            # Calculate CPU usage
+            elapsed_time = end_time - start_time
+            cpu_user = end_cpu_time.user - start_cpu_time.user
+            cpu_system = end_cpu_time.system - start_cpu_time.system
+            total_cpu = cpu_user + cpu_system
+            
+            # Calculate CPU percentage
+            cpu_percent = (total_cpu / elapsed_time) * 100
+            
+            # Get memory usage
+            memory_info = self.process.memory_info()
+            
+            cpu_TDP = 45
+            logger.info(
+                f"Request {request_id} metrics:\n"
+                f"Duration: {elapsed_time:.2f}s\n"
+                f"CPU Usage: {cpu_percent:.1f}%\n"
+                f"User CPU Time: {cpu_user:.2f}s\n"
+                f"System CPU Time: {cpu_system:.2f}s\n"
+                f"CPU Power Joules: {(cpu_percent/100)*cpu_TDP*(cpu_user+cpu_system)}\n"
+                f"CPU Power Watts: {(cpu_percent/100)*cpu_TDP}\n"
+                f"Memory Usage: {memory_info.rss / 1024 / 1024:.1f}MB"
+            )
+
+def monitor_cpu(func: Callable):
+    """Decorator to monitor CPU usage of FastAPI endpoints"""
+    cpu_monitor = CPUMonitor()
+    
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        request_id = str(time.time())  # Simple request ID based on timestamp
+        
+        with cpu_monitor.measure_cpu(request_id):
+            return await func(*args, **kwargs)
+    
+    return wrapper
+
+
+
+def download_embeddings():
+    if not os.path.exists('embeddings.pkl'):
+        # Download from S3
+        s3 = boto3.client('s3')
+        bucket_name = 'course-recommender-embeddings'
+        key = 'embeddings.pkl'  # The key (path) to your embeddings file in the S3 bucket
+        s3.download_file(bucket_name, key, 'embeddings.pkl')
+    else:
+        print("Using local embeddings.pkl")
+
+
 
 # EmbeddingRecommender class and other necessary components
 from app.recommender import EmbeddingRecommender, AsyncOpenAIClient, CosineSimilarityCalculator
@@ -19,7 +96,10 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize the recommender
+    # Startup: 
+    # Load data
+    download_embeddings()
+    # Initialize the recommender
     get_recommender()
     yield
     # Shutdown: Clean up resources if needed
@@ -54,6 +134,7 @@ def get_recommender():
     global recommender
     if recommender is None:
         # Load the course data from pkl
+        # NOTE: May be issue from running locally as container sets python path to ./backend
         pkl_path = "embeddings.pkl"
         df = pd.read_pickle(pkl_path)
         
@@ -106,6 +187,7 @@ async def root():
 #     )
 
 @app.post("/recommend")
+@monitor_cpu # Log cpu power
 async def recommend_courses(
     request: RecommendationRequest,
     recommender: EmbeddingRecommender = Depends(get_recommender)

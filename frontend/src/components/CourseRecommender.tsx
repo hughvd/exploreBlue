@@ -98,7 +98,7 @@ export default function CourseRecommender() {
         <div className="space-y-2">
           <label className="block text-sm font-medium">Course Levels (optional - leave unselected for all levels)</label>
           <div className="flex flex-wrap gap-2">
-            {[100, 200, 300, 400, 500].map((level) => (
+            {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((level) => (
               <button
                 key={level}
                 type="button"
@@ -108,7 +108,7 @@ export default function CourseRecommender() {
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
               >
-                {level} Level
+                {level}
               </button>
             ))}
           </div>

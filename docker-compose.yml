@@ -20,7 +20,6 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - ./backend/embeddings.pkl:/app/embeddings.pkl
     environment:
       - PYTHONPATH=/app
     networks:

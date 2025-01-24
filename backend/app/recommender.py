@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any, AsyncGenerator
 import heapq
 from abc import ABC, abstractmethod
 import logging
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -200,6 +201,7 @@ CONSTRAINTS:
     # Temporary function until UM ITS releases streaming for UMGPT API
     async def recommend(self, query: str, levels: Optional[List[int]] = None) -> str:
         try:
+            t1 = time.time()
             if self.courses_df is None:
                 raise ValueError("Courses have not been loaded. Call load_courses() first.")
 
@@ -216,11 +218,12 @@ CONSTRAINTS:
 
             # Prepare course string for the prompt
             course_string = "\n".join(f"{row['course']}: {row['description']}" for _, row in filtered_df.iterrows())
-
+            t1 = time.time()-t1
+            print(f"TIME FOR RETRIEVAL: {t1}")
             # Prepare the recommendation prompt
             # NOTE: our dataframe does not have the course name as a data column
             system_rec_message = f"""You are an expert academic advisor specializing in personalized course recommendations. \
-When evaluating matches between student profiles and courses, prioritize direct relevance, prerequisite alignment, and career trajectory fit.
+When evaluating matches between student profiles and courses, prioritize direct relevance and career trajectory fit.
 
 Context: Student Profile ({query})
 Course Options: 
@@ -235,8 +238,8 @@ REQUIREMENTS:
   3. Confidence level (High/Medium/Low)
 
 FORMAT (Markdown):
-1. **COURSEXXX: Couse Name**
-Rationale: [One clear sentence explaining fit]
+1. **COURSEXXX: **
+Rationale: [Two clear sentences explaining fit]
 Confidence: [Level]
 
 2. [Next course...]

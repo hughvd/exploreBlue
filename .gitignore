@@ -15,3 +15,7 @@ __pycache__/
 embeddings.pkl
 config.json
 testing.ipynb
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
