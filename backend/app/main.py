@@ -187,7 +187,7 @@ async def root():
 #     )
 
 @app.post("/recommend")
-@monitor_cpu # Log cpu power
+#@monitor_cpu # Log cpu power
 async def recommend_courses(
     request: RecommendationRequest,
     recommender: EmbeddingRecommender = Depends(get_recommender)
@@ -203,6 +203,7 @@ async def recommend_courses(
     Returns:
     - str: A string containing the course recommendations.
     """
+    print("IN BACKEND RECOMMENDATION")
     recommendation = await recommender.recommend(query=request.query, levels=request.levels)
     return recommendation
 
@@ -211,6 +212,7 @@ async def health_check():
     """
     Health check endpoint to verify if the service and its dependencies are functioning correctly.
     """
+    print("IN BACKEND HEALTH CHECK")
     try:
         # Perform a simple operation to check if the recommender is working
         recommender = get_recommender()

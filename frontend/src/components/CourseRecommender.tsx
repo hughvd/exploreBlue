@@ -25,7 +25,7 @@ export default function CourseRecommender() {
     setRecommendations('');
 
     try {
-      const response = await fetch('/recommend', {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/recommend`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -36,6 +36,8 @@ export default function CourseRecommender() {
           levels: levels.length > 0 ? levels : null 
         }),
       });
+      
+      console.log(response)
 
       if (!response.ok) {
         throw new Error('Failed to fetch recommendations');

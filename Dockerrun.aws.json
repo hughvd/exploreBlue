@@ -1,0 +1,26 @@
+{
+    "AWSEBDockerrunVersion": 2,
+    "containerDefinitions": [
+      {
+        "name": "frontend",
+        "image": "682053481809.dkr.ecr.us-east-2.amazonaws.com/courserecommendersite-frontend:latest",
+        "essential": true,
+        "portMappings": [
+          { "hostPort": 80, "containerPort": 80 }
+        ],
+        "environment": [
+          { "name": "BACKEND_URL", "value": "http://backend:8000" }
+        ],
+        "memory": 512
+      },
+      {
+        "name": "backend",
+        "image": "682053481809.dkr.ecr.us-east-2.amazonaws.com/courserecommendersite-backend:latest",
+        "essential": true,
+        "portMappings": [
+          { "hostPort": 8000, "containerPort": 8000 }
+        ],
+        "memory": 512
+      }
+    ]
+  }

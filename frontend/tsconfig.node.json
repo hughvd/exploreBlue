@@ -7,6 +7,6 @@
     "allowSyntheticDefaultImports": true,
     "jsx": "react"
   },
-  "include": ["vite.config.js", "src"],
+  "include": ["vite.config.js", "src", "vite-env.d.ts"],
   "exclude": ["node_modules"]
 }
