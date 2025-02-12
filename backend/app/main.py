@@ -11,80 +11,57 @@ from pydantic import BaseModel
 import pandas as pd
 from dotenv import load_dotenv
 import boto3
-# CPU Monitoring
+# Monitoring
 import time
 import psutil
 import functools
 import logging
+from botocore.exceptions import ClientError
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
-
-class CPUMonitor:
-    def __init__(self):
-        self.process = psutil.Process()
-    
-    @contextmanager
-    def measure_cpu(self, request_id: str):
-        """Context manager to measure CPU usage during request processing"""
-        start_time = time.time()
-        start_cpu_time = self.process.cpu_times()
-        
-        try:
-            yield
-        finally:
-            end_time = time.time()
-            end_cpu_time = self.process.cpu_times()
-            
-            # Calculate CPU usage
-            elapsed_time = end_time - start_time
-            cpu_user = end_cpu_time.user - start_cpu_time.user
-            cpu_system = end_cpu_time.system - start_cpu_time.system
-            total_cpu = cpu_user + cpu_system
-            
-            # Calculate CPU percentage
-            cpu_percent = (total_cpu / elapsed_time) * 100
-            
-            # Get memory usage
-            memory_info = self.process.memory_info()
-            
-            cpu_TDP = 45
-            logger.info(
-                f"Request {request_id} metrics:\n"
-                f"Duration: {elapsed_time:.2f}s\n"
-                f"CPU Usage: {cpu_percent:.1f}%\n"
-                f"User CPU Time: {cpu_user:.2f}s\n"
-                f"System CPU Time: {cpu_system:.2f}s\n"
-                f"CPU Power Joules: {(cpu_percent/100)*cpu_TDP*(cpu_user+cpu_system)}\n"
-                f"CPU Power Watts: {(cpu_percent/100)*cpu_TDP}\n"
-                f"Memory Usage: {memory_info.rss / 1024 / 1024:.1f}MB"
-            )
-
-def monitor_cpu(func: Callable):
-    """Decorator to monitor CPU usage of FastAPI endpoints"""
-    cpu_monitor = CPUMonitor()
-    
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        request_id = str(time.time())  # Simple request ID based on timestamp
-        
-        with cpu_monitor.measure_cpu(request_id):
-            return await func(*args, **kwargs)
-    
-    return wrapper
-
-
 
 def download_embeddings():
     if not os.path.exists('embeddings.pkl'):
-        # Download from S3
-        s3 = boto3.client('s3')
-        bucket_name = 'course-recommender-embeddings'
-        key = 'embeddings.pkl'  # The key (path) to your embeddings file in the S3 bucket
-        s3.download_file(bucket_name, key, 'embeddings.pkl')
+        s3 = boto3.client(
+            's3',
+            region_name=os.getenv('AWS_REGION', 'us-east-2')  # Keep your fallback
+        )
+        try:
+            logger.info("Attempting to download embeddings from S3...")
+            s3.download_file('course-recommender-embeddings', 'embeddings.pkl', 'embeddings.pkl')
+            logger.info("Successfully downloaded embeddings file from S3")
+            
+        except ClientError as e:
+            logger.error(f"AWS API Error: {e.response['Error']['Message']}")
+            logger.debug("Full error details:", exc_info=True)  # For debugging
+            raise
+            
+        except Exception as e:
+            logger.error(f"Unexpected download error: {str(e)}")
+            logger.exception("Stack trace:")  # Automatically includes traceback
+            raise
+            
     else:
-        print("Using local embeddings.pkl")
+        logger.info("Using locally cached embeddings.pkl - no download needed")
+
+# def download_embeddings():
+#     if not os.path.exists('embeddings.pkl'):
+#         s3 = boto3.client(
+#             's3',
+#             region_name=os.getenv('AWS_REGION', 'us-east-2')  # Fallback region
+#         )
+#         try:
+#             s3.download_file('course-recommender-embeddings', 'embeddings.pkl', 'embeddings.pkl')
+#         except Exception as e:
+#             print(f"Failed to download embeddings: {str(e)}")
+#             raise  # Crash the app if download fails
+#     else:
+#         print("Using local embeddings.pkl")
 
 
 
@@ -187,7 +164,6 @@ async def root():
 #     )
 
 @app.post("/recommend")
-#@monitor_cpu # Log cpu power
 async def recommend_courses(
     request: RecommendationRequest,
     recommender: EmbeddingRecommender = Depends(get_recommender)
