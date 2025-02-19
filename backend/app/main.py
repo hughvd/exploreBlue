@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import pandas as pd
 from dotenv import load_dotenv
 import boto3
-# Monitoring TESTING
+# Monitoring
 import time
 import psutil
 import functools
@@ -26,28 +26,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def download_embeddings():
-    if not os.path.exists('embeddings.pkl'):
-        s3 = boto3.client(
-            's3',
-            region_name=os.getenv('AWS_REGION', 'us-east-2')  # Keep your fallback
-        )
-        try:
-            logger.info("Attempting to download embeddings from S3...")
-            s3.download_file('course-recommender-embeddings', 'embeddings.pkl', 'embeddings.pkl')
-            logger.info("Successfully downloaded embeddings file from S3")
-            
-        except ClientError as e:
-            logger.error(f"AWS API Error: {e.response['Error']['Message']}")
-            logger.debug("Full error details:", exc_info=True)  # For debugging
-            raise
-            
-        except Exception as e:
-            logger.error(f"Unexpected download error: {str(e)}")
-            logger.exception("Stack trace:")  # Automatically includes traceback
-            raise
-            
-    else:
-        logger.info("Using locally cached embeddings.pkl - no download needed")
+    s3 = boto3.client(
+        's3',
+        region_name=os.getenv('AWS_REGION', 'us-east-2')  # Keep your fallback
+    )
+    try:
+        logger.info("Attempting to download embeddings from S3...")
+        s3.download_file('course-recommender-embeddings', 'embeddings.pkl', 'embeddings.pkl')
+        logger.info("Successfully downloaded embeddings file from S3")
+        
+    except ClientError as e:
+        logger.error(f"AWS API Error: {e.response['Error']['Message']}")
+        logger.debug("Full error details:", exc_info=True)  # For debugging
+        raise
+        
+    except Exception as e:
+        logger.error(f"Unexpected download error: {str(e)}")
+        logger.exception("Stack trace:")  # Automatically includes traceback
+        raise
 
 # def download_embeddings():
 #     if not os.path.exists('embeddings.pkl'):
