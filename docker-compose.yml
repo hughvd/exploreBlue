@@ -26,5 +26,5 @@ services:
       - app-network
 
 networks:
-  app-network:    # This line needed proper indentation
+  app-network:
     driver: bridge

@@ -2,9 +2,9 @@
 FROM node:20-alpine AS build
 
 # Inject the backend URL at build time
-#ARG VITE_BACKEND_URL=http://backend:8000
-ARG VITE_BACKEND_URL=http://courserecommendersite.courserecommendersite.courserecommendersite.local:8000
-ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+# ARG VITE_BACKEND_URL=http://backend:8000
+# #ARG VITE_BACKEND_URL=http://courserecommendersite.courserecommendersite.courserecommendersite.local:8000
+# ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 
 # Set the working directory to /app
 WORKDIR /app
