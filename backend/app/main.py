@@ -45,19 +45,6 @@ def download_embeddings():
         logger.exception("Stack trace:")  # Automatically includes traceback
         raise
 
-# def download_embeddings():
-#     if not os.path.exists('embeddings.pkl'):
-#         s3 = boto3.client(
-#             's3',
-#             region_name=os.getenv('AWS_REGION', 'us-east-2')  # Fallback region
-#         )
-#         try:
-#             s3.download_file('course-recommender-embeddings', 'embeddings.pkl', 'embeddings.pkl')
-#         except Exception as e:
-#             print(f"Failed to download embeddings: {str(e)}")
-#             raise  # Crash the app if download fails
-#     else:
-#         print("Using local embeddings.pkl")
 
 
 
@@ -106,30 +93,111 @@ def get_recommender():
     """
     global recommender
     if recommender is None:
-        # Load the course data from pkl
-        # NOTE: May be issue from running locally as container sets python path to ./backend
-        pkl_path = "embeddings.pkl"
-        df = pd.read_pickle(pkl_path)
-        
-        # Initialize the AsyncOpenAIClient
-        config = {
-            "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
-            "OPENAI_API_VERSION": os.getenv("OPENAI_API_VERSION"),
-            "OPENAI_API_BASE": os.getenv("OPENAI_API_BASE"),
-            "OPENAI_ORGANIZATION_ID": os.getenv("OPENAI_ORGANIZATION_ID"),
-            "GENERATOR_MODEL": os.getenv("GENERATOR_MODEL"),
-            "RECOMMENDER_MODEL": os.getenv("RECOMMENDER_MODEL"),
-            "OPENAI_EMBEDDING_MODEL": os.getenv("OPENAI_EMBEDDING_MODEL")
-        }
-        openai_client = AsyncOpenAIClient(config)
-        
-        # Initialize the CosineSimilarityCalculator
-        similarity_calculator = CosineSimilarityCalculator()
-        
-        # Initialize the EmbeddingRecommender
-        recommender = EmbeddingRecommender(openai_client, similarity_calculator)
-        recommender.load_courses(df.to_dict('records'))
+        try:
+            # Logging
+            logger.info("Initializing recommender...")
+            logger.info(f"Memory before loading pkl: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+            
+            # First verify the file exists and its size
+            pkl_path = "embeddings.pkl"
+            file_size = os.path.getsize(pkl_path)
+            logger.info(f"Found embeddings.pkl with size: {file_size / 1024 / 1024:.2f} MB")
+            
+            # Load the course data from pkl
+            try:
+                logger.info("Reading pkl...")
+                df = pd.read_pickle(pkl_path)
+                logger.info(f"Successfully read pickle file with {len(df)} rows")
+            except Exception as e:
+                logger.error(f"Reading pkl error: {str(e)}")
+                logger.error("Full error details:", exc_info=True)  # This will log the full stack trace
+                raise  # Re-raise the exception to stop initialization
+            
+            logger.info(f"Memory after loading pkl: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+            
+            try:
+                # Initialize components with logging
+                logger.info("Initializing OpenAI client...")
+                config = {
+                    "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+                    "OPENAI_API_VERSION": os.getenv("OPENAI_API_VERSION"),
+                    "OPENAI_API_BASE": os.getenv("OPENAI_API_BASE"),
+                    "OPENAI_ORGANIZATION_ID": os.getenv("OPENAI_ORGANIZATION_ID"),
+                    "GENERATOR_MODEL": os.getenv("GENERATOR_MODEL"),
+                    "RECOMMENDER_MODEL": os.getenv("RECOMMENDER_MODEL"),
+                    "OPENAI_EMBEDDING_MODEL": os.getenv("OPENAI_EMBEDDING_MODEL")
+                }
+                openai_client = AsyncOpenAIClient(config)
+                logger.info("OpenAI client initialized")
+                
+                logger.info("Initializing similarity calculator...")
+                similarity_calculator = CosineSimilarityCalculator()
+                logger.info("Similarity calculator initialized")
+                
+                logger.info("Creating EmbeddingRecommender instance...")
+                recommender = EmbeddingRecommender(openai_client, similarity_calculator)
+                logger.info("Loading courses into recommender...")
+                recommender.load_courses(df.to_dict('records'))
+                logger.info("Successfully initialized recommender")
+                
+                logger.info(f"Memory after full initialization: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+            except Exception as e:
+                logger.error(f"Error during recommender initialization: {str(e)}")
+                logger.error("Full error details:", exc_info=True)
+                raise
+                
+        except Exception as e:
+            logger.error(f"Fatal error in get_recommender: {str(e)}")
+            logger.error("Full error details:", exc_info=True)
+            raise
+            
     return recommender
+
+# def get_recommender():
+#     """
+#     Creates and returns an instance of EmbeddingRecommender.
+#     This function is used as a dependency, ensuring we only create one instance.
+#     """
+#     global recommender
+#     if recommender is None:
+#         # Logging
+#         logger.info("Initializing recommender...")
+#         logger.info(f"Memory before loading pkl: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+        
+#         # Load the course data from pkl
+#         pkl_path = "embeddings.pkl"
+#         try:
+#             logger.info("Reading pkl...")
+#             df = pd.read_pickle(pkl_path)
+#         except Exception as e:
+#             logger.error(f"Reading pkl error: {str(e)}")
+
+#         logger.info(f"Memory after loading pkl: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+        
+#         # Rest of your initialization...
+#         logger.info(f"Memory after full initialization: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+        
+#         # Initialize the AsyncOpenAIClient
+#         config = {
+#             "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+#             "OPENAI_API_VERSION": os.getenv("OPENAI_API_VERSION"),
+#             "OPENAI_API_BASE": os.getenv("OPENAI_API_BASE"),
+#             "OPENAI_ORGANIZATION_ID": os.getenv("OPENAI_ORGANIZATION_ID"),
+#             "GENERATOR_MODEL": os.getenv("GENERATOR_MODEL"),
+#             "RECOMMENDER_MODEL": os.getenv("RECOMMENDER_MODEL"),
+#             "OPENAI_EMBEDDING_MODEL": os.getenv("OPENAI_EMBEDDING_MODEL")
+#         }
+#         openai_client = AsyncOpenAIClient(config)
+        
+#         # Initialize the CosineSimilarityCalculator
+#         similarity_calculator = CosineSimilarityCalculator()
+        
+#         # Initialize the EmbeddingRecommender
+#         recommender = EmbeddingRecommender(openai_client, similarity_calculator)
+#         recommender.load_courses(df.to_dict('records'))
+#         logger.info("Successfully initialized recommender")
+#     return recommender
+
 
 @app.get("/")
 async def root():
@@ -175,25 +243,48 @@ async def recommend_courses(
     Returns:
     - str: A string containing the course recommendations.
     """
-    print("IN BACKEND RECOMMENDATION")
     recommendation = await recommender.recommend(query=request.query, levels=request.levels)
     return recommendation
 
+# @app.get("/health")
+# async def health_check():
+#     """
+#     Health check endpoint to verify if the service and its dependencies are functioning correctly.
+#     """
+#     print("IN BACKEND HEALTH CHECK")
+#     try:
+#         # Perform a simple operation to check if the recommender is working
+#         recommender = get_recommender()
+#         test_query = "test query"
+#         async for _ in recommender.stream_recommend(query=test_query, levels=[]):
+#             break
+#         return {"status": "healthy"}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Service unhealthy: {str(e)}")
+    
 @app.get("/health")
 async def health_check():
-    """
-    Health check endpoint to verify if the service and its dependencies are functioning correctly.
-    """
-    print("IN BACKEND HEALTH CHECK")
+    """Simple health check"""
+    logger.info("Health check requested")
+    return {"status": "healthy"}
+    
+@app.get("/debug")
+async def debug_info():
+    """Debug endpoint to check application state"""
     try:
-        # Perform a simple operation to check if the recommender is working
-        recommender = get_recommender()
-        test_query = "test query"
-        async for _ in recommender.stream_recommend(query=test_query, levels=[]):
-            break
-        return {"status": "healthy"}
+        file_exists = os.path.exists('embeddings.pkl')
+        file_size = os.path.getsize('embeddings.pkl') if file_exists else 0
+        memory_usage = psutil.Process().memory_info().rss / 1024 / 1024
+        recommender_initialized = recommender is not None
+        
+        return {
+            "embeddings_file_exists": file_exists,
+            "embeddings_file_size_mb": file_size / (1024 * 1024),
+            "current_memory_mb": memory_usage,
+            "recommender_initialized": recommender_initialized
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Service unhealthy: {str(e)}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

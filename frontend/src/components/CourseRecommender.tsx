@@ -23,9 +23,7 @@ export default function CourseRecommender() {
     setIsLoading(true);
     setError('');
     setRecommendations('');
-    console.log("Before before response await")
     try {
-      console.log("Before response await")
       // ${import.meta.env.VITE_BACKEND_URL}
       const response = await fetch('/recommend', {
         method: 'POST',

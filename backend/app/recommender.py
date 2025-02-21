@@ -132,7 +132,7 @@ Student Request:
 
 
             # Prepare course string for the prompt
-            course_string = "\n".join(f"{row['course']}: {row['description']}" for _, row in filtered_df.iterrows())
+            course_string = "\n".join(f"{row['course']}: {row['title']}\n{row['description']}" for _, row in filtered_df.iterrows())
 
             # Prepare the recommendation prompt
             system_rec_message = f"""You are an expert academic advisor specializing in personalized course recommendations. \
@@ -198,7 +198,7 @@ CONSTRAINTS:
             filtered_df = filtered_df.iloc[similar_course_indices]
 
             # Prepare course string for the prompt
-            course_string = "\n".join(f"{row['course']}: {row['name']}\n{row['description']}" for _, row in filtered_df.iterrows())
+            course_string = "\n".join(f"{row['course']}: {row['title']}\n{row['description']}" for _, row in filtered_df.iterrows())
             t1 = time.time()-t1
             print(f"TIME FOR RETRIEVAL: {t1}")
             # Prepare the recommendation prompt
