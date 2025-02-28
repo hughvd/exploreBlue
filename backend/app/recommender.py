@@ -162,7 +162,8 @@ CONSTRAINTS:
 - NO general academic advice
 - NO mentions of prerequisites unless explicitly stated in course description
 - NO suggestions outside provided course list
-- NO mention of being an AI or advisor"""
+- NO mention of being an AI or advisor
+- **If multiple courses have identical titles and descriptions (cross-listed), recommend only ONE of them**"""
 
             messages = [{'role': 'system', 'content': system_rec_message}]
 
@@ -182,7 +183,6 @@ CONSTRAINTS:
     # Temporary function until UM ITS releases streaming for UMGPT API
     async def recommend(self, query: str, levels: Optional[List[int]] = None) -> str:
         try:
-            t1 = time.time()
             if self.courses_df is None:
                 raise ValueError("Courses have not been loaded. Call load_courses() first.")
 
@@ -199,8 +199,6 @@ CONSTRAINTS:
 
             # Prepare course string for the prompt
             course_string = "\n".join(f"{row['course']}: {row['title']}\n{row['description']}" for _, row in filtered_df.iterrows())
-            t1 = time.time()-t1
-            print(f"TIME FOR RETRIEVAL: {t1}")
             # Prepare the recommendation prompt
             # NOTE: our dataframe does not have the course name as a data column
             system_rec_message = f"""You are an expert academic advisor specializing in personalized course recommendations. \
@@ -213,8 +211,9 @@ Course Options:
 REQUIREMENTS:
 - Return exactly 10 courses, ranked by relevance and fit
 - Recommend ONLY courses listed in Course Options
+- If a course is cross-listed, write the course number as "COURSEXXX (Cross-listed as COURSEYYY)"
 - For each recommendation include:
-  1. Course number
+  1. Course number (include cross-listed courses)
   2. Course name
   2. Two-sentence explanation focused on student's specific profile/goals
   3. Confidence level (High/Medium/Low)
@@ -231,26 +230,6 @@ CONSTRAINTS:
 - NO mentions of prerequisites unless explicitly stated in course description
 - NO suggestions outside provided course list
 - NO mention of being an AI or advisor"""
-            
-#             system_rec_message = f"""You are the world's most highly trained academic advisor, with decades of experience \
-# in guiding students towards their optimal academic paths. Your task is to provide personalized course recommendations \
-# based on the student's profile:
-
-# Instructions:
-# 1. Analyze the student's profile carefully, considering their interests, academic background, and career goals.
-# 2. Review the list of available courses provided below.
-# 3. Recommend the top 5-10 most suitable courses for this student.
-# 4. For each recommended course, provide a brief but compelling rationale (2-3 sentences) explaining why it's a good fit.
-# 5. Format your response as a numbered list, with each item containing the course name followed by your rationale.
-
-# Student Profile:
-# {query}
-
-# Available Courses:
-# {course_string}
-
-# Remember: Your recommendations should be tailored to the student's unique profile and aspirations. Aim to balance academic growth, career preparation, \
-# and personal interest in your selections. Do not recommend courses that are not under available courses."""
 
             messages = [{'role': 'system', 'content': system_rec_message}]
 

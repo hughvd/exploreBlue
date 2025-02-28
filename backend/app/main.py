@@ -58,7 +58,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
 async def lifespan(app: FastAPI):
     # Startup: 
     # Load data
-    download_embeddings()
+    # download_embeddings()
     # Initialize the recommender
     get_recommender()
     yield
