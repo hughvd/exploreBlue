@@ -1,8 +1,9 @@
-import CourseRecommender from './components/CourseRecommender'
+import React from 'react'
+import ExploreBlue from './components/CourseRecommender'
 
 function App() {
   return (
-    <CourseRecommender />
+    <ExploreBlue />
   )
 }
 
