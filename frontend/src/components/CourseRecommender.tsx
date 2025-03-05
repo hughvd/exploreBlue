@@ -95,7 +95,7 @@ export default function ExploreBlue() {
             ExploreBlue
           </h1>
           <p className="text-xl text-gray-600">
-            Discover courses based on your interests
+            Discover steps for your academic path
           </p>
         </div>
 
@@ -116,7 +116,7 @@ export default function ExploreBlue() {
                     type="text"
                     value={query}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-                    placeholder="E.g., machine learning, environmental science, data analysis..."
+                    placeholder="E.g., I am interested in machine learning and data science..."
                     className="block w-full pl-10 pr-12 py-3 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
