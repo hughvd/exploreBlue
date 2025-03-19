@@ -155,7 +155,7 @@ export default function ExploreBlue() {
                           <span>Specify skills or technologies you want to learn</span>
                         </li>
                       </ul>
-                      
+
                       <h4 className="font-medium text-blue-800 mt-4 mb-2">Example prompts:</h4>
                       <div className="space-y-2">
                         {suggestions.map((suggestion, index) => (
@@ -169,6 +169,9 @@ export default function ExploreBlue() {
                           </button>
                         ))}
                       </div>
+
+                      <h4 className="font-medium text-blue-800 mt-4 mb-2">Note: ExploreBlue does not use information about course requirements</h4>
+                      
                     </div>
                   )}
                 </div>
@@ -247,8 +250,14 @@ export default function ExploreBlue() {
             </div>
           )}
         </div>
-
+        
+        {/* Footer */}
         <footer className="mt-10 text-center text-sm text-gray-500">
+          <p>
+            <a href="https://forms.gle/DZ8RjF9E6ENQuEe88" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+              Give us your feedback
+            </a>
+          </p>
           <p>© 2025 Hugh Van Deventer</p>
         </footer>
       </div>
