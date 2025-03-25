@@ -8,6 +8,7 @@ phases:
       # Download the copilot linux binary.
       - wget -q https://ecs-cli-v2-release.s3.amazonaws.com/copilot-linux-v1.34.0 -O copilot-linux
       - chmod +x ./copilot-linux
+      - ec
   build:
     commands:
       - echo "Run your tests"
@@ -18,6 +19,7 @@ phases:
       - export COLOR="false"
       - export CI="true"
       - pipeline=$(cat $CODEBUILD_SRC_DIR/copilot/pipelines/courserecommendersite-frontend/manifest.yml | ruby -ryaml -rjson -e 'puts JSON.pretty_generate(YAML.load(ARGF))')
+      - echo $pipeline
       - pl_envs=$(echo $pipeline | jq -r '.stages[].name')
       # Find all the local services in the workspace.
       - svc_ls_result=$(./copilot-linux svc ls --local --json)
