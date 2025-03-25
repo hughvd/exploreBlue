@@ -18,6 +18,7 @@ phases:
       - ls -l
       - export COLOR="false"
       - export CI="true"
+      - echo $CODEBUILD_SRC_DIR
       - pipeline=$(cat $CODEBUILD_SRC_DIR/copilot/pipelines/courserecommendersite-frontend/manifest.yml | ruby -ryaml -rjson -e 'puts JSON.pretty_generate(YAML.load(ARGF))')
       - echo $pipeline
       - pl_envs=$(echo $pipeline | jq -r '.stages[].name')
