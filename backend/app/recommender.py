@@ -69,6 +69,24 @@ class EmbeddingRecommender:
 
     def load_courses(self, courses_data: List[Dict[str, Any]]):
         self.courses_df = pd.DataFrame(courses_data)
+        self.courses_by_level = {
+            100: self.courses_df[self.courses_df['level'] == 100],
+            200: self.courses_df[self.courses_df['level'] == 200],
+            300: self.courses_df[self.courses_df['level'] == 300],
+            400: self.courses_df[self.courses_df['level'] == 400],
+            500: self.courses_df[self.courses_df['level'] == 500],
+            600: self.courses_df[self.courses_df['level'] == 600],
+            700: self.courses_df[self.courses_df['level'] == 700],
+            800: self.courses_df[self.courses_df['level'] == 800],
+            900: self.courses_df[self.courses_df['level'] == 900]
+        }
+
+    async def get_filtered_courses(self, levels: Optional[List[int]] = None) -> pd.DataFrame:
+        if self.courses_df is None:
+            raise ValueError("Courses have not been loaded. Call load_courses() first.")
+        if levels is None:
+            return self.courses_df
+        return pd.concat([self.courses_by_level[level] for level in levels])
 
     async def generate_example_description(self, query: str) -> str:
         system_content = f"""You will be given a request from a student at The University of Michigan to provide quality course recommendations. \
