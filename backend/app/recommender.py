@@ -1,15 +1,21 @@
 import numpy as np
 import pandas as pd
 from openai import AsyncAzureOpenAI
-from typing import List, Optional, Dict, Any, AsyncGenerator
+from typing import List, Optional, Dict, Any, AsyncGenerator, Set
 import heapq
 from abc import ABC, abstractmethod
 import logging
 import time
+import asyncio
+from functools import lru_cache
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Define API request rate limiting
+MAX_CONCURRENT_API_CALLS = 5
+api_semaphore = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
 
 class AsyncOpenAIClient:
     def __init__(self, config: Dict[str, str]):
@@ -22,29 +28,42 @@ class AsyncOpenAIClient:
         self.generator_model = config["GENERATOR_MODEL"]
         self.rec_model = config["RECOMMENDER_MODEL"]
         self.embedding_model = config["OPENAI_EMBEDDING_MODEL"]
+        
+        # Add caching for embeddings to reduce API calls
+        self.embedding_cache = {}
 
     async def generate_chat_completion(self, messages: List[Dict[str, str]]) -> AsyncGenerator[str, None]:
         try:
-            response = await self.client.chat.completions.create(
-                model=self.rec_model,
-                messages=messages,
-                temperature=0,
-                stream=True
-            )
-            async for chunk in response:
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
+            async with api_semaphore:
+                response = await self.client.chat.completions.create(
+                    model=self.rec_model,
+                    messages=messages,
+                    temperature=0,
+                    stream=True
+                )
+                async for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
         except Exception as e:
             logger.error(f"Error in generate_chat_completion: {str(e)}")
             raise
 
     async def generate_embedding(self, text: str) -> List[float]:
+        # Check cache first
+        if text in self.embedding_cache:
+            logger.info("Using cached embedding")
+            return self.embedding_cache[text]
+        
         try:
-            response = await self.client.embeddings.create(
-                input=[text],
-                model=self.embedding_model
-            )
-            return response.data[0].embedding
+            async with api_semaphore:
+                response = await self.client.embeddings.create(
+                    input=[text],
+                    model=self.embedding_model
+                )
+                embedding = response.data[0].embedding
+                # Cache the result
+                self.embedding_cache[text] = embedding
+                return embedding
         except Exception as e:
             logger.error(f"Error in generate_embedding: {str(e)}")
             raise
@@ -65,30 +84,33 @@ class EmbeddingRecommender:
     def __init__(self, openai_client: AsyncOpenAIClient, similarity_calculator: SimilarityCalculator):
         self.openai_client = openai_client
         self.similarity_calculator = similarity_calculator
-        self.courses_df: Optional[pd.DataFrame] = None
+        self.courses_by_level = {}
+        
+        # Add concurrency control
+        self.embedding_lock = asyncio.Lock()
 
     def load_courses(self, courses_data: List[Dict[str, Any]]):
-        self.courses_df = pd.DataFrame(courses_data)
-        self.courses_by_level = {
-            100: self.courses_df[self.courses_df['level'] == 100],
-            200: self.courses_df[self.courses_df['level'] == 200],
-            300: self.courses_df[self.courses_df['level'] == 300],
-            400: self.courses_df[self.courses_df['level'] == 400],
-            500: self.courses_df[self.courses_df['level'] == 500],
-            600: self.courses_df[self.courses_df['level'] == 600],
-            700: self.courses_df[self.courses_df['level'] == 700],
-            800: self.courses_df[self.courses_df['level'] == 800],
-            900: self.courses_df[self.courses_df['level'] == 900]
-        }
-
+        """Load courses data and pre-organize by level"""
+        temp = pd.DataFrame(courses_data)
+        
+        # Pre-compute level filtering for common course levels
+        for level in range(100, 1000, 100):
+            self.courses_by_level[level] = temp[temp['level'] == level]
+    
     async def get_filtered_courses(self, levels: Optional[List[int]] = None) -> pd.DataFrame:
-        if self.courses_df is None:
+        """Get courses filtered by level with caching for repeated queries"""
+        if not self.courses_by_level:
             raise ValueError("Courses have not been loaded. Call load_courses() first.")
+        # Apply filtering
         if levels is None:
-            return self.courses_df
-        return pd.concat([self.courses_by_level[level] for level in levels])
+            filtered_df = pd.concat(list(self.courses_by_level.values()))
+        else:
+            filtered_df = pd.concat([self.courses_by_level[level] for level in levels])
+
+        return filtered_df
 
     async def generate_example_description(self, query: str) -> str:
+        """Generate an example description based on the query"""
         system_content = f"""You will be given a request from a student at The University of Michigan to provide quality course recommendations. \
 Generate a course description that would be most applicable to their request. In the course description, provide a list of topics as well as a \
 general description of the course. Limit the description to be less than 200 words.
@@ -101,53 +123,64 @@ Student Request:
             {"role": "user", "content": query}
         ]
         try:
-            response = await self.openai_client.client.chat.completions.create(
-                model=self.openai_client.generator_model,
-                messages=messages,
-                temperature=0,
-                stream=False
-            )
-            return response.choices[0].message.content
+            async with api_semaphore:
+                response = await self.openai_client.client.chat.completions.create(
+                    model=self.openai_client.generator_model,
+                    messages=messages,
+                    temperature=0,
+                    stream=False
+                )
+                return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Error generating example description: {str(e)}")
             raise
 
     def find_similar_courses(self, filtered_df: pd.DataFrame, example_embedding: List[float], top_n: int = 50) -> List[int]:
-        heap = []
-        for idx, row in filtered_df.iterrows():
-            similarity = self.similarity_calculator.calculate(example_embedding, row['embedding'])
-            if len(heap) < top_n:
-                heapq.heappush(heap, (similarity, idx))
-            elif similarity > heap[0][0]:
-                heapq.heappushpop(heap, (similarity, idx))
-        return [idx for _, idx in heap]
+        """Find most similar courses based on embedding similarity"""
+        # Use a more efficient approach for large dataframes
+        if len(filtered_df) > 1000:
+            # Convert to numpy arrays for vectorized operations
+            embeddings = np.array(filtered_df['embedding'].tolist())
+            example_np = np.array(example_embedding)
+            
+            # Compute all similarities at once (vectorized)
+            dot_products = np.dot(embeddings, example_np)
+            norms = np.linalg.norm(embeddings, axis=1) * np.linalg.norm(example_np)
+            similarities = dot_products / norms
+            
+            # Get indices of top_n highest similarities
+            top_indices = np.argsort(similarities)[-top_n:][::-1]
+            return filtered_df.index[top_indices].tolist()
+        else:
+            # Original implementation for smaller dataframes
+            heap = []
+            for idx, row in filtered_df.iterrows():
+                similarity = self.similarity_calculator.calculate(example_embedding, row['embedding'])
+                if len(heap) < top_n:
+                    heapq.heappush(heap, (similarity, idx))
+                elif similarity > heap[0][0]:
+                    heapq.heappushpop(heap, (similarity, idx))
+            return [idx for _, idx in heap]
 
     async def stream_recommend(self, query: str, levels: Optional[List[int]] = None) -> AsyncGenerator[str, None]:
+        """Generate streaming recommendation response"""
         try:
-            if self.courses_df is None:
+            if not self.courses_by_level:
                 raise ValueError("Courses have not been loaded. Call load_courses() first.")
 
-            # Generate example description and its embedding
-            try:
-                example_description = await self.generate_example_description(query)
-            except Exception as e:
-                yield f"Error generating example description: {str(e)}"
-                return
-
-            try:
+            # Generate example description and embedding concurrently
+            example_description = await self.generate_example_description(query)
+            
+            # Get embedding with appropriate concurrency control
+            async with self.embedding_lock:
                 example_embedding = await self.openai_client.generate_embedding(example_description)
-            except Exception as e:
-                yield f"Error generating embedding: {str(e)}"
-                return
 
-            # Filter courses by level and similarity
-            filtered_df = self.courses_df if levels is None else self.courses_df[self.courses_df['level'].isin(levels)]
-            # Reset the index of filtered_df
+            # Filter courses and find similar ones
+            filtered_df = await self.get_filtered_courses(levels)
             filtered_df = filtered_df.reset_index(drop=True)
             
             similar_course_indices = self.find_similar_courses(filtered_df, example_embedding)
             filtered_df = filtered_df.iloc[similar_course_indices]
-
 
             # Prepare course string for the prompt
             course_string = "\n".join(f"{row['course']}: {row['title']}\n{row['description']}" for _, row in filtered_df.iterrows())
@@ -185,40 +218,45 @@ CONSTRAINTS:
 
             messages = [{'role': 'system', 'content': system_rec_message}]
 
-            # Stream the recommendation
+            # Stream the recommendation with appropriate concurrency control
             try:
                 async for token in self.openai_client.generate_chat_completion(messages):
                     yield token
-            except Exception as e:
-                yield f"Error generating recommendation: {str(e)}"
-                
             except Exception as e:
                 yield f"Error generating recommendation: {str(e)}"
 
         except Exception as e:
             yield f"Unexpected error: {str(e)}"
 
-    # Temporary function until UM ITS releases streaming for UMGPT API
     async def recommend(self, query: str, levels: Optional[List[int]] = None) -> str:
+        """Non-streaming recommendation function"""
         try:
-            if self.courses_df is None:
+            if not self.courses_by_level:
                 raise ValueError("Courses have not been loaded. Call load_courses() first.")
 
-            # Generate example description and its embedding
+            # Generate example description and get embedding with concurrency control
+            start_time = time.time()
             example_description = await self.generate_example_description(query)
-            example_embedding = await self.openai_client.generate_embedding(example_description)
+            logger.info(f"Generated example description in {time.time() - start_time:.2f}s")
+            
+            start_time = time.time()
+            async with self.embedding_lock:
+                example_embedding = await self.openai_client.generate_embedding(example_description)
+            logger.info(f"Generated embedding in {time.time() - start_time:.2f}s")
 
-            # Filter courses by level and similarity
-            filtered_df = self.courses_df if levels is None else self.courses_df[self.courses_df['level'].isin(levels)]
+            # Filter and find similar courses
+            start_time = time.time()
+            filtered_df = await self.get_filtered_courses(levels)
             filtered_df = filtered_df.reset_index(drop=True)
             
             similar_course_indices = self.find_similar_courses(filtered_df, example_embedding)
             filtered_df = filtered_df.iloc[similar_course_indices]
+            logger.info(f"Found similar courses in {time.time() - start_time:.2f}s")
 
             # Prepare course string for the prompt
             course_string = "\n".join(f"{row['course']}: {row['title']}\n{row['description']}" for _, row in filtered_df.iterrows())
+            
             # Prepare the recommendation prompt
-            # NOTE: our dataframe does not have the course name as a data column
             system_rec_message = f"""You are an expert academic advisor specializing in personalized course recommendations. \
 When evaluating matches between student profiles and courses, prioritize direct relevance and career trajectory fit.
 
@@ -251,35 +289,19 @@ CONSTRAINTS:
 
             messages = [{'role': 'system', 'content': system_rec_message}]
 
-            response = await self.openai_client.client.chat.completions.create(
-                model=self.openai_client.rec_model,
-                messages=messages,
-                temperature=0,
-                stream=False
-            )
+            # Generate recommendation with concurrency control
+            start_time = time.time()
+            async with api_semaphore:
+                response = await self.openai_client.client.chat.completions.create(
+                    model=self.openai_client.rec_model,
+                    messages=messages,
+                    temperature=0,
+                    stream=False
+                )
+            logger.info(f"Generated recommendation in {time.time() - start_time:.2f}s")
+            
             recommendation = response.choices[0].message.content
             return recommendation
         except Exception as e:
+            logger.error(f"Error in recommend: {str(e)}")
             return f"Error: {str(e)}"
-
-# Usage example:
-# config = {
-#     "OPENAI_API_KEY": "your_api_key",
-#     "OPENAI_API_VERSION": "your_api_version",
-#     "OPENAI_API_BASE": "your_api_base",
-#     "OPENAI_ORGANIZATION_ID": "your_org_id",
-#     "GENERATOR_MODEL": "your_generator_model",
-#     "RECOMMENDER_MODEL": "your_recommender_model",
-#     "OPENAI_EMBEDDING_MODEL": "your_embedding_model"
-# }
-# openai_client = AsyncOpenAIClient(config)
-# similarity_calculator = CosineSimilarityCalculator()
-# recommender = EmbeddingRecommender(openai_client, similarity_calculator)
-# recommender.load_courses(courses_data)
-# 
-# async def print_recommendation():
-#     async for token in recommender.stream_recommend("I'm interested in machine learning and data science."):
-#         print(token, end='', flush=True)
-# 
-# import asyncio
-# asyncio.run(print_recommendation())

@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 
 export default function ExploreBlue() {
   const [query, setQuery] = useState<string>('');
-  const [levels, setLevels] = useState<number[]>([]);
+  const [levels, setLevels] = useState<number[]>([100, 200, 300, 400]);
   const [recommendations, setRecommendations] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
