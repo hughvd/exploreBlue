@@ -32,28 +32,25 @@ async def download_embeddings_async():
     return await loop.run_in_executor(None, download_embeddings)
 
 def download_embeddings():
-    """Download embeddings from S3 (runs in executor)"""
-    # Check if file already exists first to avoid unnecessary downloads
-    if os.path.exists('embeddings.pkl'):
-        logger.info("Embeddings file already exists, skipping download")
-        return
-
     s3 = boto3.client(
         's3',
-        region_name=os.getenv('AWS_REGION', 'us-east-2')
+        region_name=os.getenv('AWS_REGION', 'us-east-2')  # Keep your fallback
     )
-    try:
-        logger.info("Downloading embeddings from S3...")
-        s3.download_file('course-recommender-embeddings', 'embeddings.pkl', 'embeddings.pkl')
-        logger.info("Successfully downloaded embeddings file from S3")
-    except ClientError as e:
-        logger.error(f"AWS API Error: {e.response['Error']['Message']}")
-        logger.debug("Full error details:", exc_info=True)
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected download error: {str(e)}")
-        logger.exception("Stack trace:")
-        raise
+    if not os.path.exists('embeddings.pkl'):
+        try:
+            logger.info("Attempting to download embeddings from S3...")
+            s3.download_file('course-recommender-embeddings', 'embeddings.pkl', 'embeddings.pkl')
+            logger.info("Successfully downloaded embeddings file from S3")
+            
+        except ClientError as e:
+            logger.error(f"AWS API Error: {e.response['Error']['Message']}")
+            logger.debug("Full error details:", exc_info=True)  # For debugging
+            raise
+            
+        except Exception as e:
+            logger.error(f"Unexpected download error: {str(e)}")
+            logger.exception("Stack trace:")  # Automatically includes traceback
+            raise
 
 # Import necessary classes
 from app.recommender import EmbeddingRecommender, AsyncOpenAIClient, CosineSimilarityCalculator
@@ -106,11 +103,16 @@ async def get_recommender():
             pkl_path = "embeddings.pkl"
             file_size = os.path.getsize(pkl_path)
             logger.info(f"Found embeddings.pkl with size: {file_size / 1024 / 1024:.2f} MB")
-            
-            # Run pandas read in executor to avoid blocking
-            loop = asyncio.get_event_loop()
-            df_temp = await loop.run_in_executor(None, lambda: pd.read_pickle(pkl_path))
-            logger.info(f"Successfully read pickle file with {len(df_temp)} rows")
+
+            # Load the course data from pkl
+            try:
+                logger.info("Reading pkl...")
+                df_temp = pd.read_pickle(pkl_path)
+                logger.info(f"Successfully read pickle file with {len(df_temp)} rows")
+            except Exception as e:
+                logger.error(f"Reading pkl error: {str(e)}")
+                logger.error("Full error details:", exc_info=True)  # This will log the full stack trace
+                raise  # Re-raise the exception to stop initialization
                 
             logger.info(f"Memory after loading pkl: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
             
