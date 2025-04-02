@@ -37,6 +37,11 @@ export default function ExploreBlue() {
           levels: levels.length > 0 ? levels : null 
         }),
       });
+
+      if (response.status === 429) {
+        // Handle rate-limiting error
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
       
       if (!response.ok) {
         throw new Error('Failed to fetch recommendations');

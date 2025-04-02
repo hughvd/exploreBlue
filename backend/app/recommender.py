@@ -296,6 +296,7 @@ CONSTRAINTS:
                     model=self.openai_client.rec_model,
                     messages=messages,
                     temperature=0,
+                    max_tokens=1500,
                     stream=False
                 )
             logger.info(f"Generated recommendation in {time.time() - start_time:.2f}s")

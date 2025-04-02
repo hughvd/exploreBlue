@@ -14,6 +14,7 @@ import psutil
 import logging
 import asyncio
 from botocore.exceptions import ClientError
+from collections import deque
 
 # Set up logging
 logging.basicConfig(
@@ -34,7 +35,7 @@ async def download_embeddings_async():
 def download_embeddings():
     s3 = boto3.client(
         's3',
-        region_name=os.getenv('AWS_REGION', 'us-east-2')  # Keep your fallback
+        region_name=os.getenv('AWS_REGION', 'us-east-2')
     )
     if not os.path.exists('embeddings.pkl'):
         try:
@@ -67,6 +68,45 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown: No cleanup needed
     pass
+
+# Rate limiter configuration
+MAX_REQUESTS_PER_PERIOD = 1  # Maximum number of requests
+RATE_LIMIT_PERIOD = 60  # Time period in seconds
+
+class RateLimiter:
+    def __init__(self, max_requests: int, period: float):
+        """
+        Initialize the rate limiter.
+
+        :param max_requests: Maximum number of requests allowed in the given period.
+        :param period: Time period (in seconds) for the rate limit.
+        """
+        self.max_requests = max_requests
+        self.period = period
+        self.request_timestamps = deque()
+
+    def is_request_allowed(self) -> bool:
+        """
+        Check if a request is allowed under the rate limit.
+
+        :return: True if the request is allowed, False otherwise.
+        """
+        current_time = time.time()
+
+        # Remove timestamps outside the current period
+        while self.request_timestamps and self.request_timestamps[0] < current_time - self.period:
+            self.request_timestamps.popleft()
+
+        if len(self.request_timestamps) < self.max_requests:
+            # Allow the request and record the timestamp
+            self.request_timestamps.append(current_time)
+            return True
+        else:
+            # Deny the request
+            return False
+
+# Initialize the rate limiter
+rate_limiter = RateLimiter(MAX_REQUESTS_PER_PERIOD, RATE_LIMIT_PERIOD)
 
 # Initialize FastAPI app
 app = FastAPI(title="Course Recommender API", lifespan=lifespan)
@@ -155,8 +195,15 @@ async def recommend_courses(
 ):
     """
     Endpoint to get course recommendations based on user query and preferred levels.
-    Uses a semaphore to limit concurrent API calls.
+    Uses a semaphore to limit concurrent API calls and a rate limiter to enforce request limits.
     """
+    # Enforce rate limiting
+    if not rate_limiter.is_request_allowed():
+        raise HTTPException(
+            status_code=429,  # Too Many Requests
+            detail=f"Rate limit exceeded. Try again later."
+        )
+    # Limit concurrent recommendations
     async with recommendation_semaphore:
         recommendation = await recommender_instance.recommend(
             query=request.query, 
