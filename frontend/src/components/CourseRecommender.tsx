@@ -136,11 +136,17 @@ export default function ExploreBlue() {
                     className="flex items-center text-sm text-blue-600 hover:text-blue-800 focus:outline-none transition-colors"
                   >
                     {isHelpOpen ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
-                    Need help getting started?
+                    Getting started? Please read
                   </button>
                   
                   {isHelpOpen && (
                     <div className="mt-3 bg-blue-50 p-4 rounded-lg animate-fadeIn">
+                      <h4 className="font-medium text-blue-800 mb-2">What is ExploreBlue?</h4>
+                      <ul className="space-y-3 text-sm text-gray-700">
+                        ExploreBlue is a tool designed to help you discover courses that align with your interests and career goals. 
+                        It provides personalized recommendations based on your input by constructing an ideal course based on your query and 
+                        finding UM courses that are the most similar based on the course description and title.
+                      </ul>
                       <h4 className="font-medium text-blue-800 mb-2">Try one of these approaches:</h4>
                       <ul className="space-y-3 text-sm text-gray-700">
                         <li className="flex items-start">
